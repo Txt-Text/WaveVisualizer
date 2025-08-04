@@ -1,5 +1,6 @@
 /**
 * @author Txt_Text
+*                    Demo
 * ###########################################
 * #                                         #
 * #             Wave Visualizer             #
@@ -70,7 +71,10 @@ void DrawWaveform(float intensity) {
         float sample = waveform[i0] * (1.0f - frac) + waveform[i1] * frac;
 
         float x = ((float)i / (width - 1)) * 2.0f - 1.0f;
-        float y = sample * 0.8f * intensity;
+        
+        // 1.0 是 OpenGL 顶部，sample 往下偏移
+        float y = 1.0f - fabsf(sample) * intensity * 2.0f;
+        //float y = sample * 0.8f * intensity;
 
         glColor4f(0.0f, 1.0f, 0.0f, intensity * 0.2f);
         glVertex2f(x, y);
