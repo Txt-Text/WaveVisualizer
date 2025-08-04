@@ -18,6 +18,7 @@
 #include <tchar.h>
 #include <vector>
 #include <cmath>
+#include <shellapi.h>//主要是系统托盘相关
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
@@ -32,7 +33,8 @@ HGLRC hRC;
 HWND hWnd;
 ma_device device;
 std::vector<float> waveform(512, 0.0f);
-bool showBars = false;//显示额外的示波器
+bool showForm = false;//显示线条示波器
+bool showBars = true;//显示额外的示波器
 bool enableGlow = false;//开启发光
 bool visible = true;//可见
 int width = GetSystemMetrics(SM_CXSCREEN) + 100;//获取主显示器屏幕宽度
@@ -41,6 +43,16 @@ int height = 200;
 
 bool dragging = false;
 POINT lastCursor = { 0 };
+
+#define WM_TRAYICON (WM_USER + 1)
+
+enum TrayMenu {
+    ID_TOGGLE_VISIBLE = 1001,
+    ID_TOGGLE_BARS,
+    ID_TOGGLE_LINES,
+    ID_TOGGLE_GLOW,
+    ID_EXIT
+};
 
 //回调音频
 void audio_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
@@ -130,26 +142,53 @@ void DrawBars() {
     glBegin(GL_QUADS);
     for (int i = 0; i < width; ++i) {
         int index = (i * 512) / width;
-        float x = ((float)i / (width - 1)) * 2.0f - 1.0f;
+        float x = ((float)i + 0.5f) * 2.0f / width - 1.0f;//
         float barWidth = 2.0f / width;
-        float y = fabsf(waveform[index]);
+        float y = -fabsf(waveform[index]) * 2.0f; // 向下拉伸
+
         float r = (float)i / width;
         float g = 1.0f - r;
         glColor4f(r, g, 0.4f, 1.0f);
-        glVertex2f(x, -1.0f);
-        glVertex2f(x + barWidth, -1.0f);
-        glVertex2f(x + barWidth, -1.0f + y * 2.0f);
-        glVertex2f(x, -1.0f + y * 2.0f);
+
+        // 从 +1.0 开始往下画
+        glVertex2f(x, 1.0f);
+        glVertex2f(x + barWidth, 1.0f);
+        glVertex2f(x + barWidth, 1.0f + y);
+        glVertex2f(x, 1.0f + y);
     }
     glEnd();
 }
+//向上生长的版本
+//void DrawBars() {
+//    glBegin(GL_QUADS);
+//    for (int i = 0; i < width; ++i) {
+//        int index = (i * 512) / width;
+//        float x = ((float)i / (width - 1)) * 2.0f - 1.0f;
+//        float barWidth = 2.0f / width;
+//        float y = fabsf(waveform[index]);
+//        float r = (float)i / width;
+//        float g = 1.0f - r;
+//        glColor4f(r, g, 0.4f, 1.0f);
+//        glVertex2f(x, -1.0f);
+//        glVertex2f(x + barWidth, -1.0f);
+//        glVertex2f(x + barWidth, -1.0f + y * 2.0f);
+//        glVertex2f(x, -1.0f + y * 2.0f);
+//    }
+//    glEnd();
+//}
 
 // Render frame
-void Render() {
+void Render() {//渲染
     if (!visible) return;
+    //if (!visible) {
+    //    glClearColor(0, 0, 0, 0); // 清除内容
+    //    glClear(GL_COLOR_BUFFER_BIT);
+    //    SwapBuffers(hDC); //强制刷新一帧为空白
+    //    return;
+    //}
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
-    if (enableGlow) {
+    if (enableGlow && showForm) {//开启发光且开启线条示波器（发光效果只对线条示波器有效）
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE);
         for (float i = 0.2f; i <= 1.0f; i += 0.2f) DrawWaveform(i);
@@ -157,9 +196,9 @@ void Render() {
     }
     else {
         glColor3f(0.0f, 1.0f, 0.0f);
-        DrawWaveform(1.0f);
+        if(showForm) DrawWaveform(1.0f);//是否绘制线条示波器
     }
-    if (showBars) DrawBars();
+    if (showBars) DrawBars();//是否绘制bar示波器
     SwapBuffers(hDC);
 }
 
@@ -167,11 +206,37 @@ void Render() {
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_DESTROY: PostQuitMessage(0); break;
-    case WM_KEYDOWN:
+    case WM_TRAYICON://处理托盘图标点击
+        if (lParam == WM_RBUTTONUP) {
+            POINT pt;
+            GetCursorPos(&pt);
+            HMENU hMenu = CreatePopupMenu();
+            AppendMenu(hMenu, MF_STRING | (visible ? MF_CHECKED : 0), ID_TOGGLE_VISIBLE, L"启用");
+            AppendMenu(hMenu, MF_STRING | (showBars ? MF_CHECKED : 0), ID_TOGGLE_BARS, L"启用波形条");
+            AppendMenu(hMenu, MF_STRING | (showForm ? MF_CHECKED : 0), ID_TOGGLE_LINES, L"启用波形线");
+            //AppendMenu(hMenu, MF_STRING | (enableGlow ? MF_CHECKED : 0), ID_TOGGLE_GLOW, L"发光");//这个发光做得太垃圾了，不展示了先
+            AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenu(hMenu, MF_STRING, ID_EXIT, L"退出");
+
+            SetForegroundWindow(hWnd); // 兼容性所需
+            TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hWnd, NULL);
+            DestroyMenu(hMenu);
+        }
+        break;
+    case WM_COMMAND://处理菜单点击事件
+        switch (LOWORD(wParam)) {
+        case ID_TOGGLE_VISIBLE: visible = !visible; ShowWindow(hWnd, visible ? SW_SHOW : SW_HIDE); break;//隐藏整个窗口
+        case ID_TOGGLE_BARS: showBars = !showBars; break;
+        case ID_TOGGLE_LINES: showForm = !showForm; break;
+        //case ID_TOGGLE_GLOW: enableGlow = !enableGlow; break;
+        case ID_EXIT: PostQuitMessage(0); break;
+        }
+        break;
+    /*case WM_KEYDOWN://不需要快捷键了先
         if (wParam == VK_SPACE) showBars = !showBars;
         if (wParam == 'G') enableGlow = !enableGlow;
         if (wParam == 'V') visible = !visible;
-        break;
+        break;*/
     case WM_LBUTTONDOWN: dragging = true; GetCursorPos(&lastCursor); break;
     case WM_LBUTTONUP: dragging = false; break;
     case WM_MOUSEMOVE:
@@ -188,8 +253,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
+void AddSystemTray() {
+    
+
+}
+
 //主窗口入口点相关
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
+
     WNDCLASS wc = { 0 };
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
@@ -203,6 +274,17 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     SetLayeredWindowAttributes(hWnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
     SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
     ShowWindow(hWnd, SW_SHOW);
+
+    //创建托盘图标
+    NOTIFYICONDATA nid = { sizeof(NOTIFYICONDATA) };
+    nid.hWnd = hWnd;
+    nid.uID = 1;
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    nid.uCallbackMessage = WM_TRAYICON;
+    nid.hIcon = LoadIcon(NULL, IDI_APPLICATION); // 可自定义图标
+    wcscpy_s(nid.szTip, L"Wave Visualizer");//Waveform Visualizer
+
+    Shell_NotifyIcon(NIM_ADD, &nid);
 
     hDC = GetDC(hWnd);
     SetupOpenGL();
@@ -230,5 +312,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     ma_device_uninit(&device);
     wglDeleteContext(hRC);
     ReleaseDC(hWnd, hDC);
+    //退出时清理托盘图标
+    nid.uFlags = 0;
+    Shell_NotifyIcon(NIM_DELETE, &nid);
     return 0;
 }
