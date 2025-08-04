@@ -226,8 +226,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_COMMAND://处理菜单点击事件
         switch (LOWORD(wParam)) {
         case ID_TOGGLE_VISIBLE: visible = !visible; ShowWindow(hWnd, visible ? SW_SHOW : SW_HIDE); break;//隐藏整个窗口
-        case ID_TOGGLE_BARS: showBars = !showBars; break;
-        case ID_TOGGLE_LINES: showForm = !showForm; break;
+        case ID_TOGGLE_BARS: {//波形条
+            showBars = !showBars;
+            if (showForm) showForm = false;//让波形条和波形线不能同时开
+        }break;
+        case ID_TOGGLE_LINES: {//波形线
+            showForm = !showForm; 
+            if (showBars) showBars = false;
+        }break;
+            
         //case ID_TOGGLE_GLOW: enableGlow = !enableGlow; break;
         case ID_EXIT: PostQuitMessage(0); break;
         }
