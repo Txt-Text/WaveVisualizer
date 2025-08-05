@@ -5,12 +5,17 @@
 * #                                         #
 * #             Wave Visualizer             #
 * #                                         #
-* #                音量示波器                #
+* #                音频示波器                #
 * #                                         #
 * #               By Txt_Text               #
 * #                                         #
 * ###########################################
 */
+
+#define CURRENT_VERSION L"v1.0"
+#define TRUE 1
+#define FALSE  0
+#define ADD_ABOUT TRUE//是否添加关于
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -51,7 +56,8 @@ enum TrayMenu {
     ID_TOGGLE_BARS,
     ID_TOGGLE_LINES,
     ID_TOGGLE_GLOW,
-    ID_EXIT
+    ID_EXIT,
+    ABOUT
 };
 
 //回调音频
@@ -215,6 +221,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             AppendMenu(hMenu, MF_STRING | (showBars ? MF_CHECKED : 0), ID_TOGGLE_BARS, L"启用波形条");
             AppendMenu(hMenu, MF_STRING | (showForm ? MF_CHECKED : 0), ID_TOGGLE_LINES, L"启用波形线");
             //AppendMenu(hMenu, MF_STRING | (enableGlow ? MF_CHECKED : 0), ID_TOGGLE_GLOW, L"发光");//这个发光做得太垃圾了，不展示了先
+            #if ADD_ABOUT
+            AppendMenu(hMenu, MF_STRING , ABOUT, L"关于...");
+            #endif
             AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
             AppendMenu(hMenu, MF_STRING, ID_EXIT, L"退出");
 
@@ -236,6 +245,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }break;
             
         //case ID_TOGGLE_GLOW: enableGlow = !enableGlow; break;
+        #if ADD_ABOUT
+        case ABOUT: MessageBox(NULL, L"音频示波器 Wave Visualizer\n版本：" CURRENT_VERSION "\n\n作者：Txt_Text\n这是我的开源项目！这里是项目仓库：\nhttps://github.com/Txt-Text/WaveVisualizer", L"关于", MB_OK); break;
+        #endif
         case ID_EXIT: PostQuitMessage(0); break;
         }
         break;
@@ -258,11 +270,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     default: return DefWindowProc(hwnd, msg, wParam, lParam);
     }
     return 0;
-}
-
-void AddSystemTray() {
-    
-
 }
 
 //主窗口入口点相关
@@ -290,7 +297,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     nid.uCallbackMessage = WM_TRAYICON;
     nid.hIcon = LoadIcon(NULL, IDI_APPLICATION); // 可自定义图标
     wcscpy_s(nid.szTip, L"Wave Visualizer");//Waveform Visualizer
-
     Shell_NotifyIcon(NIM_ADD, &nid);
 
     hDC = GetDC(hWnd);
@@ -319,6 +325,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     ma_device_uninit(&device);
     wglDeleteContext(hRC);
     ReleaseDC(hWnd, hDC);
+
     //退出时清理托盘图标
     nid.uFlags = 0;
     Shell_NotifyIcon(NIM_DELETE, &nid);
